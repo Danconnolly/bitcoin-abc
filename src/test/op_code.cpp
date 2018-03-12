@@ -496,6 +496,70 @@ void test_cat_split(uint32_t flags) {
     test_cat_split({0x01, 0x02}, flags);
     test_cat_split({0x01, 0x02, 0x03}, flags);
 }
+
+/// OP_BIN2NUM tests
+
+/// make bin - helper function
+///    input: a number
+///    output: BIN representation Big Endian (BE)
+///    removes the sign, constructs a BE array of bytes with the positive
+///    number,
+///    the adds the sign.
+item mk_bin(int64_t numBinary) {
+    if (numBinary == 0) return item{0x00};
+    bool neg = numBinary < 0;
+    uint64_t v = htobe64(neg ? -numBinary : numBinary);
+    item result;
+    result.reserve(sizeof(uint64_t));
+    uint8_t *p = reinterpret_cast<uint8_t *>(&v);
+    for (size_t i = 0; i < sizeof(uint64_t); ++i, ++p) {
+        if (result.empty()) {
+            if (!*p) continue;
+            if (*p & 0x80)
+                result.push_back(0x00); // first bit looks like a sign but it is
+                                        // not, add a leading 0
+        }
+        result.push_back(*p);
+    }
+    if (neg) *result.begin() |= 0x80; // add the sign
+    return move(result);
+}
+
+void test_bin2num(uint32_t flags) {
+    CScript script;
+    script << OP_BIN2NUM;
+    {
+        item i{0x00, 0x80, 0x00, 0x05};
+        BOOST_CHECK_EQUAL(mk_bin(0x800005) == i, true);
+    }
+    {
+        item i{0x05};
+        BOOST_CHECK_EQUAL(mk_bin(0x000005) == i, true);
+    }
+    {
+        item i{0x01, 0x05};
+        BOOST_CHECK_EQUAL(mk_bin(0x000105) == i, true);
+    }
+    {
+        item i{0x81, 0x05};
+        BOOST_CHECK_EQUAL(mk_bin(-0x000105) == i, true);
+    }
+    test(script, stack_t(), flags, SCRIPT_ERR_INVALID_STACK_OPERATION);
+    test(script, stack_t{mk_bin(0)}, flags, stack_t{{}});
+    test(script, stack_t{mk_bin((int64_t)INT_MAX >> 1)}, flags,
+         stack_t{CScriptNum(INT_MAX >> 1).getvch()});
+    test(script, stack_t{mk_bin((int64_t)INT_MIN >> 1)}, flags,
+         stack_t{CScriptNum(INT_MIN >> 1).getvch()});
+    test(script, stack_t{mk_bin((int64_t)(INT_MAX >> 1) + 1)}, flags,
+         SCRIPT_ERR_INVALID_BIN2NUM_OPERATION);
+    test(script, stack_t{mk_bin((int64_t)(INT_MIN >> 1) - 1)}, flags,
+         SCRIPT_ERR_INVALID_BIN2NUM_OPERATION);
+    test(script, stack_t{mk_bin(106894)}, flags,
+         stack_t{CScriptNum(106894).getvch()});
+    test(script, stack_t{mk_bin(-106894)}, flags,
+         stack_t{CScriptNum(-106894).getvch()});
+    test(script, stack_t{mk_bin(0)}, flags, stack_t{CScriptNum(0).getvch()});
+}
 }
 
 /// Entry points
@@ -566,6 +630,15 @@ BOOST_AUTO_TEST_CASE(cat_split) {
                    SCRIPT_ENABLE_OPCODES_MONOLITH);
     test_cat_split(STANDARD_LOCKTIME_VERIFY_FLAGS |
                    SCRIPT_ENABLE_OPCODES_MONOLITH);
+}
+
+BOOST_AUTO_TEST_CASE(op_bin2num) {
+    test_bin2num(SCRIPT_ENABLE_OPCODES_MONOLITH);
+    test_bin2num(STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_OPCODES_MONOLITH);
+    test_bin2num(STANDARD_NOT_MANDATORY_VERIFY_FLAGS |
+                 SCRIPT_ENABLE_OPCODES_MONOLITH);
+    test_bin2num(STANDARD_LOCKTIME_VERIFY_FLAGS |
+                 SCRIPT_ENABLE_OPCODES_MONOLITH);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
