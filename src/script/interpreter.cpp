@@ -312,6 +312,8 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
     }
     int nOpCount = 0;
     bool fRequireMinimal = (flags & SCRIPT_VERIFY_MINIMALDATA) != 0;
+    bool fEnabledOpCodesMonolith =
+        (flags & SCRIPT_ENABLE_OPCODES_MONOLITH) != 0;
 
     try {
         while (pc < pend) {
@@ -334,10 +336,16 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
 
             if (opcode == OP_CAT || opcode == OP_SPLIT ||
                 opcode == OP_NUM2BIN || opcode == OP_BIN2NUM ||
-                opcode == OP_INVERT || opcode == OP_AND || opcode == OP_OR ||
-                opcode == OP_XOR || opcode == OP_2MUL || opcode == OP_2DIV ||
+                opcode == OP_INVERT || opcode == OP_2MUL || opcode == OP_2DIV ||
                 opcode == OP_MUL || opcode == OP_DIV || opcode == OP_MOD ||
                 opcode == OP_LSHIFT || opcode == OP_RSHIFT) {
+                // Disabled opcodes.
+                return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE);
+            }
+
+            // if not monolith protocol upgrade (May 2018) then still disabled
+            if (!fEnabledOpCodesMonolith &&
+                (opcode == OP_AND || opcode == OP_XOR || opcode == OP_OR)) {
                 // Disabled opcodes.
                 return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE);
             }
@@ -778,6 +786,50 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
                     //
                     // Bitwise logic
                     //
+                    case OP_AND:
+                    case OP_OR:
+                    case OP_XOR: {
+                        // (x1 x2 - out)
+                        if (stack.size() < 2) {
+                            return set_error(
+                                serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                        }
+                        valtype &vch1 = stacktop(-2);
+                        valtype &vch2 = stacktop(-1);
+                        // throw error if inputs are not the same size
+                        if (vch1.size() != vch2.size()) {
+                            return set_error(
+                                serror, SCRIPT_ERR_INVALID_BITWISE_OPERATION);
+                        }
+
+                        switch (opcode) {
+                            case OP_AND:
+                                for (auto it = vch1.begin(); it != vch1.end();
+                                     ++it) {
+                                    auto i = std::distance(vch1.begin(), it);
+                                    *it &= vch2[i];
+                                }
+                                break;
+                            case OP_OR:
+                                for (auto it = vch1.begin(); it != vch1.end();
+                                     ++it) {
+                                    auto i = std::distance(vch1.begin(), it);
+                                    *it |= vch2[i];
+                                }
+                                break;
+                            case OP_XOR:
+                                for (auto it = vch1.begin(); it != vch1.end();
+                                     ++it) {
+                                    auto i = std::distance(vch1.begin(), it);
+                                    *it ^= vch2[i];
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                        stack.pop_back();
+                    } break;
+
                     case OP_EQUAL:
                     case OP_EQUALVERIFY:
                         // case OP_NOTEQUAL: // use OP_NUMNOTEQUAL

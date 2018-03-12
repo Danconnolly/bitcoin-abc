@@ -38,6 +38,7 @@ add_executable(test_bitcoin
 	multisig_tests.cpp
 	net_tests.cpp
 	netbase_tests.cpp
+	op_code.cpp
 	pmt_tests.cpp
 	policyestimator_tests.cpp
 	pow_tests.cpp
