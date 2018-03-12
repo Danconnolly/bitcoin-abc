@@ -337,7 +337,7 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
             if (opcode == OP_CAT || opcode == OP_SPLIT ||
                 opcode == OP_NUM2BIN || opcode == OP_BIN2NUM ||
                 opcode == OP_INVERT || opcode == OP_2MUL || opcode == OP_2DIV ||
-                opcode == OP_MUL || opcode == OP_MOD || opcode == OP_LSHIFT ||
+                opcode == OP_MUL || opcode == OP_LSHIFT ||
                 opcode == OP_RSHIFT) {
                 // Disabled opcodes.
                 return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE);
@@ -346,7 +346,7 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
             // if not monolith protocol upgrade (May 2018) then still disabled
             if (!fEnabledOpCodesMonolith &&
                 (opcode == OP_AND || opcode == OP_XOR || opcode == OP_OR ||
-                 opcode == OP_DIV)) {
+                 opcode == OP_DIV || opcode == OP_MOD)) {
                 // Disabled opcodes.
                 return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE);
             }
@@ -910,6 +910,7 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
                     case OP_ADD:
                     case OP_SUB:
                     case OP_DIV:
+                    case OP_MOD:
                     case OP_BOOLAND:
                     case OP_BOOLOR:
                     case OP_NUMEQUAL:
@@ -945,6 +946,15 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
                                                      SCRIPT_ERR_DIV_BY_ZERO);
                                 }
                                 bn = bn1 / bn2;
+                                break;
+
+                            case OP_MOD:
+                                // 2nd operand must not be 0
+                                if (bn2 == 0) {
+                                    return set_error(serror,
+                                                     SCRIPT_ERR_MOD_BY_ZERO);
+                                }
+                                bn = bn1 % bn2;
                                 break;
 
                             case OP_BOOLAND:
