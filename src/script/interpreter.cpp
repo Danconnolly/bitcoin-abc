@@ -334,9 +334,9 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
                 return set_error(serror, SCRIPT_ERR_OP_COUNT);
             }
 
-            if (opcode == OP_NUM2BIN || opcode == OP_INVERT ||
-                opcode == OP_2MUL || opcode == OP_2DIV || opcode == OP_MUL ||
-                opcode == OP_LSHIFT || opcode == OP_RSHIFT) {
+            if (opcode == OP_INVERT || opcode == OP_2MUL || opcode == OP_2DIV ||
+                opcode == OP_MUL || opcode == OP_LSHIFT ||
+                opcode == OP_RSHIFT) {
                 // Disabled opcodes.
                 return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE);
             }
@@ -344,8 +344,9 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
             // if not monolith protocol upgrade (May 2018) then still disabled
             if (!fEnabledOpCodesMonolith &&
                 (opcode == OP_CAT || opcode == OP_SPLIT ||
-                 opcode == OP_BIN2NUM || opcode == OP_AND || opcode == OP_XOR ||
-                 opcode == OP_OR || opcode == OP_DIV || opcode == OP_MOD)) {
+                 opcode == OP_BIN2NUM || opcode == OP_NUM2BIN ||
+                 opcode == OP_AND || opcode == OP_XOR || opcode == OP_OR ||
+                 opcode == OP_DIV || opcode == OP_MOD)) {
                 // Disabled opcodes.
                 return set_error(serror, SCRIPT_ERR_DISABLED_OPCODE);
             }
@@ -1328,6 +1329,52 @@ bool EvalScript(std::vector<valtype> &stack, const CScript &script,
                         }
                         stack.pop_back();
                         stack.push_back(num.getvch());
+                    } break;
+
+                    case OP_NUM2BIN: {
+                        // (in size -- out)
+                        if (stack.size() < 2) {
+                            return set_error(
+                                serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
+                        }
+                        CScriptNum num(stacktop(-2), fRequireMinimal);
+                        int64_t size =
+                            CScriptNum(stacktop(-1), fRequireMinimal).getint();
+                        if (size < 1 ||
+                            static_cast<uint64_t>(size) >
+                                CScriptNum::nDefaultMaxNumSize) {
+                            return set_error(
+                                serror, SCRIPT_ERR_INVALID_NUM2BIN_OPERATION);
+                        }
+                        // Produces a byte vector of num and check if input size
+                        // is valid
+                        valtype vchNum = num.getvch();
+                        if (size < vchNum.size()) {
+                            return set_error(
+                                serror, SCRIPT_ERR_INVALID_NUM2BIN_OPERATION);
+                        }
+                        // Initialize byte vector for result
+                        valtype result;
+                        result.reserve(size);
+                        bool neg{false};
+                        // Avoid negative zero
+                        if (!vchNum.empty()) {
+                            neg = *vchNum.rbegin() & 0x80;
+                            *vchNum.rbegin() &= ~0x80;
+                        }
+                        // Pad result to declared input size
+                        size_t pad = size - vchNum.size();
+                        for (uint8_t i = 0; i < pad; ++i) {
+                            result.push_back(0);
+                        }
+                        for (auto i = vchNum.rbegin(); i != vchNum.rend();
+                             ++i) {
+                            result.push_back(*i);
+                        }
+                        if (neg) *result.begin() |= 0x80;
+                        stack.pop_back();
+                        stack.pop_back();
+                        stack.push_back(result);
                     } break;
 
                     default:
