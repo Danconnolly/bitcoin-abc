@@ -1,6 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
 // Copyright (c) 2017 The Bitcoin developers
+// Copyright (c) 2018 The Bitcoin Cash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -195,8 +196,7 @@ static void FindFilesToPruneManual(std::set<int> &setFilesToPrune,
 static void FindFilesToPrune(std::set<int> &setFilesToPrune,
                              uint64_t nPruneAfterHeight);
 static FILE *OpenUndoFile(const CDiskBlockPos &pos, bool fReadOnly = false);
-static uint32_t GetBlockScriptFlags(const CBlockIndex *pindex,
-                                    const Config &config);
+uint32_t GetBlockScriptFlags(const CBlockIndex *pindex, const Config &config);
 
 static bool IsFinalTx(const CTransaction &tx, int nBlockHeight,
                       int64_t nBlockTime) {
@@ -1849,8 +1849,7 @@ public:
 static ThresholdConditionCache warningcache[VERSIONBITS_NUM_BITS];
 
 // Returns the script flags which should be checked for a given block
-static uint32_t GetBlockScriptFlags(const CBlockIndex *pindex,
-                                    const Config &config) {
+uint32_t GetBlockScriptFlags(const CBlockIndex *pindex, const Config &config) {
     AssertLockHeld(cs_main);
     const Consensus::Params &consensusparams =
         config.GetChainParams().GetConsensus();
@@ -1892,6 +1891,11 @@ static uint32_t GetBlockScriptFlags(const CBlockIndex *pindex,
     if (IsDAAEnabled(config, pindex->pprev)) {
         flags |= SCRIPT_VERIFY_LOW_S;
         flags |= SCRIPT_VERIFY_NULLFAIL;
+    }
+
+    if (IsMonolithEnabled(config, pindex->pprev)) {
+        // When the May 15, 2018 HF is enabled, activate new opcodes.
+        flags |= SCRIPT_ENABLE_OPCODES_MONOLITH;
     }
 
     return flags;

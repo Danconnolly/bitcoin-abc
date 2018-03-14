@@ -1,5 +1,6 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
 // Copyright (c) 2017 The Bitcoin developers
+// Copyright (c) 2018 The Bitcoin Cash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,6 +8,7 @@
 #include "config.h"
 #include "consensus/consensus.h"
 #include "primitives/transaction.h"
+#include "script/interpreter.h"
 #include "test/test_bitcoin.h"
 #include "util.h"
 #include "validation.h"
@@ -16,6 +18,10 @@
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
+
+// defined in validation.cpp but not declared in validation.h - dont want to
+// expose in header just for tests
+uint32_t GetBlockScriptFlags(const CBlockIndex *pindex, const Config &config);
 
 static CBlock makeLargeDummyBlock(const size_t num_tx) {
     CBlock block;
@@ -74,6 +80,34 @@ BOOST_AUTO_TEST_CASE(validation_load_external_block_file) {
 
     fseek(fp, 0, SEEK_SET);
     BOOST_CHECK_NO_THROW({ LoadExternalBlockFile(config, fp, 0); });
+}
+
+/** test that GetBlockScriptFlags produces the correct flags for monolith
+ * upgrade (May 2018) */
+BOOST_AUTO_TEST_CASE(getblockscriptflags_monolith) {
+    GlobalConfig config;
+
+    // add a block to the chain - chain will be (genesis block, new block)
+    CBlockIndex newBlock;
+    CBlockIndex *genesisBlock = chainActive.Tip();
+    newBlock.pprev = genesisBlock;
+    chainActive.SetTip(&newBlock);
+
+    // monolith not enabled
+    BOOST_CHECK(!IsMonolithEnabled(config, genesisBlock));
+
+    uint32_t flags = GetBlockScriptFlags(&newBlock, config);
+    BOOST_CHECK((flags & SCRIPT_ENABLE_OPCODES_MONOLITH) == 0);
+
+    // Activate May 15, 2018 HF the dirty way
+    const int64_t monolithTime =
+        config.GetChainParams().GetConsensus().monolithActivationTime;
+    genesisBlock->nTime = monolithTime;
+
+    BOOST_CHECK(IsMonolithEnabled(config, genesisBlock));
+
+    flags = GetBlockScriptFlags(&newBlock, config);
+    BOOST_CHECK((flags & SCRIPT_ENABLE_OPCODES_MONOLITH) != 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
