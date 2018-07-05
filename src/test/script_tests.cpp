@@ -158,6 +158,7 @@ static void DoTest(const CScript &scriptPubKey, const CScript &scriptSig,
         BuildCreditingTransaction(scriptPubKey, nValue);
     CMutableTransaction tx = BuildSpendingTransaction(scriptSig, txCredit);
     CMutableTransaction tx2 = tx;
+    BOOST_TEST_MESSAGE("dan: running " + message + ", txhash=" + HexStr(tx.GetHash()));
     BOOST_CHECK_MESSAGE(VerifyScript(scriptSig, scriptPubKey, flags,
                                      MutableTransactionSignatureChecker(
                                          &tx, 0, txCredit.vout[0].nValue),
